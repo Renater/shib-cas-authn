@@ -17,6 +17,8 @@ import javax.security.auth.Subject;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.security.Principal;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -60,6 +62,8 @@ public class AuthenticatedNameTranslator implements CasToShibTranslator {
                 Collections.emptySet(), Collections.emptySet()));
             logger.info("Created an IdP subject instance with principals containing attributes for {} ", casPrincipal.getName());
 
+            var authenticationDate = casPrincipal.getAttributes().get("authenticationDate");
+            if (authenticationDate != null) setAuthnInstant(request, authenticationDate);
         } else {
             logger.debug("No attributes released from CAS. Creating an IdP principal for {}", casPrincipal.getName());
             request.setAttribute(ExternalAuthentication.PRINCIPAL_NAME_KEY, casPrincipal.getName());
@@ -76,6 +80,19 @@ public class AuthenticatedNameTranslator implements CasToShibTranslator {
         return EqualsBuilder.reflectionEquals(this, that);
     }
 
+    public void setAuthnInstant(HttpServletRequest request, Object authenticationDate) {
+        if (authenticationDate instanceof String authnDate) {
+            try {
+                var instant = Instant.parse(authnDate);
+                logger.debug("Setting authnInstant from CAS: {}", authnDate, instant);
+                request.setAttribute(ExternalAuthentication.AUTHENTICATION_INSTANT_KEY, instant);
+                return;
+            } catch (DateTimeParseException e) {
+            }
+        }
+        logger.warn("Ignoring weird 'authenticationDate' ({}) returned by CAS", authenticationDate);
+    }
+    
     private Collection<IdPAttributePrincipal> produceIdpAttributePrincipal(final Map<String, Object> casAttributes) {
         final Set<IdPAttributePrincipal> principals = new HashSet<>();
         for (final Map.Entry<String, Object> entry : casAttributes.entrySet()) {
